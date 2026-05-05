@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { CdxField, CdxSelect } from '@wikimedia/codex'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
 definePage({
   meta: {
     title: 'Reader thanks',
-    description: "Template for an article page that's loaded from a static snapshot.",
+    description: "Once the reader has been on this article for 15 seconds, it shows them a non-intrusive option to thank the editor(s).",
   },
 })
 
@@ -16,7 +17,27 @@ const INSERT_DELAY_MS = 5000
 const articleContainerRef = ref<HTMLElement | null>(null)
 const showThanksDialog = ref(false)
 const thanksMessage = ref('')
+const thanksReason = ref('')
+const thanksInputMode = ref<'message' | 'reason'>('message')
 const thanksDismissed = ref(false)
+
+const reasonOptions = [
+  { value: 'school-topic', label: 'Helped me understand a school topic' },
+  { value: 'settle-debate', label: 'Helped me verify a claim or settle a debate' },
+  { value: 'interesting-info', label: 'I learned something new and interesting' },
+  { value: 'quick-overview', label: 'Gave me a quick overview of an unfamiliar topic' },
+  { value: 'further-reading', label: 'Pointed me to useful sources for further reading' },
+]
+
+const thanksInfoTooltip =
+  'could link to info on recent editors of this section or info about editing wikipedia'
+
+const dialogPrompt = computed(() => {
+  if (thanksInputMode.value === 'reason') {
+    return 'Your thanks has been recorded, but you can optionally let the editor know how this article helped you:'
+  }
+  return 'Your thanks has been recorded, but you can optionally add a short message. Let the editors who worked on this article know how it helped you!'
+})
 
 let insertionTimeout: ReturnType<typeof window.setTimeout> | null = null
 let paragraphObserver: MutationObserver | null = null
@@ -28,6 +49,7 @@ function onThanksLinkClick(event: MouseEvent) {
 
 function dismissThanks() {
   thanksMessage.value = ''
+  thanksReason.value = ''
   showThanksDialog.value = false
   thanksDismissed.value = true
 
@@ -153,17 +175,51 @@ onBeforeUnmount(() => {
     <div v-if="showThanksDialog" class="reader-thanks-modal" role="dialog" aria-modal="true">
       <div class="reader-thanks-modal__backdrop" @click="onSkipThanks" />
       <section class="reader-thanks-modal__panel" aria-label="Thank editors">
-        <p class="reader-thanks-modal__prompt">
-          Your thanks has been recorded, but you can optionally add a short message. Let the
-          editors who worked on this article know how it helped you!
-        </p>
+        <div class="reader-thanks-modal__modes" role="tablist" aria-label="Response format">
+          <button
+            type="button"
+            role="tab"
+            class="reader-thanks-modal__mode-btn"
+            :class="{
+              'reader-thanks-modal__mode-btn--active': thanksInputMode === 'message',
+            }"
+            :aria-selected="thanksInputMode === 'message'"
+            @click="thanksInputMode = 'message'"
+          >
+            free text
+          </button>
+          <button
+            type="button"
+            role="tab"
+            class="reader-thanks-modal__mode-btn"
+            :class="{
+              'reader-thanks-modal__mode-btn--active': thanksInputMode === 'reason',
+            }"
+            :aria-selected="thanksInputMode === 'reason'"
+            @click="thanksInputMode = 'reason'"
+          >
+            dropdown
+          </button>
+        </div>
+
+        <p class="reader-thanks-modal__prompt">{{ dialogPrompt }}</p>
 
         <textarea
+          v-if="thanksInputMode === 'message'"
           v-model="thanksMessage"
           class="reader-thanks-modal__textarea"
           rows="4"
           placeholder="Optional message"
         />
+
+        <CdxField v-else class="reader-thanks-modal__reason-field">
+          <template #label>How this article helped</template>
+          <CdxSelect
+            v-model:selected="thanksReason"
+            default-label="Choose one (optional)"
+            :menu-items="reasonOptions"
+          />
+        </CdxField>
 
         <div class="reader-thanks-modal__actions">
           <button type="button" class="reader-thanks-modal__btn" @click="onSkipThanks">skip</button>
@@ -177,7 +233,12 @@ onBeforeUnmount(() => {
         </div>
 
         <p class="reader-thanks-modal__meta">
-          <a href="#" class="reader-thanks-modal__meta-link" @click.prevent>
+          <a
+            href="#"
+            class="reader-thanks-modal__meta-link"
+            :title="thanksInfoTooltip"
+            @click.prevent
+          >
             who does my thanks go to?
           </a>
         </p>
@@ -240,6 +301,32 @@ onBeforeUnmount(() => {
   line-height: var(--line-height-medium, 1.6);
 }
 
+.reader-thanks-modal__modes {
+  display: inline-flex;
+  gap: var(--spacing-25, 4px);
+  margin-bottom: var(--spacing-100, 16px);
+  padding: var(--spacing-25, 4px);
+  border-radius: var(--border-radius-base, 2px);
+  background: var(--background-color-interactive-subtle, #f8f9fa);
+}
+
+.reader-thanks-modal__mode-btn {
+  border: 1px solid transparent;
+  border-radius: var(--border-radius-base, 2px);
+  background: transparent;
+  color: var(--color-subtle, #54595d);
+  font-size: var(--font-size-small, 0.875rem);
+  padding: var(--spacing-35, 6px) var(--spacing-75, 12px);
+  text-transform: lowercase;
+  cursor: pointer;
+}
+
+.reader-thanks-modal__mode-btn--active {
+  border-color: var(--border-color-base, #a2a9b1);
+  background: var(--background-color-base, #fff);
+  color: var(--color-base, #202122);
+}
+
 .reader-thanks-modal__textarea {
   box-sizing: border-box;
   width: 100%;
@@ -251,6 +338,10 @@ onBeforeUnmount(() => {
   font: inherit;
   color: var(--color-base, #202122);
   background: var(--background-color-base, #fff);
+}
+
+.reader-thanks-modal__reason-field {
+  margin: 0;
 }
 
 .reader-thanks-modal__actions {
